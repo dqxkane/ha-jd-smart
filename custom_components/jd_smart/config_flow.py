@@ -6,7 +6,6 @@ import secrets
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.core import HomeAssistant
@@ -27,14 +26,14 @@ from .const import (
     CONF_APP_VERSION,
     CONF_CHANNEL,
     CONF_COOKIE,
-    CONF_DEVICE_NAME,
-    CONF_DEVICES,
     CONF_DEVICE_ID,
     CONF_DEVICE_MODEL,
+    CONF_DEVICE_NAME,
+    CONF_DEVICES,
     CONF_FEED_ID,
+    CONF_PIN,
     CONF_PLATFORM,
     CONF_PLATFORM_VERSION,
-    CONF_PIN,
     CONF_SGM_CONTEXT,
     CONF_TGT,
     CONF_USER_AGENT,
@@ -47,6 +46,7 @@ from .const import (
     DEFAULT_USER_AGENT,
     DOMAIN,
     LOGGER,
+    auth_refresh_notification_ids,
 )
 
 ACTION_ADD_DEVICE = "add_device"
@@ -99,9 +99,7 @@ def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_SGM_CONTEXT, default=defaults.get(CONF_SGM_CONTEXT, "")
             ): str,
-            vol.Optional(
-                CONF_DEVICE_ID, default=defaults.get(CONF_DEVICE_ID, "")
-            ): str,
+            vol.Optional(CONF_DEVICE_ID, default=defaults.get(CONF_DEVICE_ID, "")): str,
             vol.Optional(
                 CONF_PLATFORM, default=defaults.get(CONF_PLATFORM, DEFAULT_PLATFORM)
             ): str,
@@ -115,9 +113,7 @@ def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             ): str,
             vol.Optional(
                 CONF_PLATFORM_VERSION,
-                default=defaults.get(
-                    CONF_PLATFORM_VERSION, DEFAULT_PLATFORM_VERSION
-                ),
+                default=defaults.get(CONF_PLATFORM_VERSION, DEFAULT_PLATFORM_VERSION),
             ): str,
             vol.Optional(
                 CONF_CHANNEL, default=defaults.get(CONF_CHANNEL, DEFAULT_CHANNEL)
@@ -167,13 +163,7 @@ def _client_from_data(hass: HomeAssistant, data: dict[str, Any]) -> JdSmartClien
 
 async def _refresh_auth(hass: HomeAssistant, data: dict[str, Any]) -> None:
     """Refresh auth data and persist refreshed values into data."""
-    try:
-        new_tgt, new_cookie = await _client_from_data(
-            hass, data
-        ).async_refresh_token()
-    except JdSmartTokenRefreshError as err:
-        _notify_token_refresh_failed(hass, err)
-        raise
+    new_tgt, new_cookie = await _client_from_data(hass, data).async_refresh_token()
     data[CONF_TGT] = new_tgt
     data[CONF_COOKIE] = new_cookie
 
@@ -256,7 +246,9 @@ class JdSmartAcConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 self._auth_data = data
                 self._target_entry = None
-                configured_feed_ids = _configured_feed_ids(self._async_current_entries())
+                configured_feed_ids = _configured_feed_ids(
+                    self._async_current_entries()
+                )
                 self._devices = [
                     device
                     for device in devices
@@ -351,7 +343,9 @@ class JdSmartAcConfigFlow(ConfigFlow, domain=DOMAIN):
         devices = getattr(self, "_devices", [])
         if user_input is not None:
             selected = user_input[CONF_SELECTED_DEVICES]
-            selected_feed_ids = {selected} if isinstance(selected, str) else set(selected)
+            selected_feed_ids = (
+                {selected} if isinstance(selected, str) else set(selected)
+            )
             selected_devices = [
                 device for device in devices if device.feed_id in selected_feed_ids
             ]
@@ -432,6 +426,13 @@ class JdSmartAcConfigFlow(ConfigFlow, domain=DOMAIN):
                 LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
+                feed_ids = tuple(
+                    device[CONF_FEED_ID] for device in _entry_devices(entry.data)
+                )
+                for notification_id in auth_refresh_notification_ids(
+                    entry.entry_id, feed_ids
+                ):
+                    persistent_notification.async_dismiss(self.hass, notification_id)
                 return self.async_update_reload_and_abort(
                     entry,
                     data=data,
@@ -452,6 +453,13 @@ class JdSmartAcConfigFlow(ConfigFlow, domain=DOMAIN):
                 if key in auth_data:
                     data[key] = auth_data[key]
             self.hass.config_entries.async_update_entry(entry, data=data)
+            feed_ids = tuple(
+                device[CONF_FEED_ID] for device in _entry_devices(entry.data)
+            )
+            for notification_id in auth_refresh_notification_ids(
+                entry.entry_id, feed_ids
+            ):
+                persistent_notification.async_dismiss(self.hass, notification_id)
             await self.hass.config_entries.async_reload(entry.entry_id)
 
 
@@ -483,8 +491,7 @@ def _merge_entry_devices(
 ) -> dict[str, Any]:
     """Merge selected devices into an existing entry."""
     devices = {
-        device[CONF_FEED_ID]: dict(device)
-        for device in _entry_devices(entry_data)
+        device[CONF_FEED_ID]: dict(device) for device in _entry_devices(entry_data)
     }
     for device in selected_devices:
         devices[device.feed_id] = {
@@ -520,19 +527,3 @@ def _configured_feed_ids(entries) -> set[str]:
     for entry in entries:
         feed_ids.update(device[CONF_FEED_ID] for device in _entry_devices(entry.data))
     return feed_ids
-
-
-def _notify_token_refresh_failed(hass: HomeAssistant, err: Exception) -> None:
-    """Create a persistent notification for token refresh failures."""
-    reason = str(err) or err.__class__.__name__
-    LOGGER.error("JD Smart token refresh failed: %s", reason)
-    persistent_notification.async_create(
-        hass,
-        (
-            "JD Smart failed to refresh authentication. "
-            f"Reason: {reason}. "
-            "Open Settings > Devices & services and update JD Smart authentication."
-        ),
-        title="JD Smart authentication refresh failed",
-        notification_id=f"{DOMAIN}_token_refresh_failed",
-    )
