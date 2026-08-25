@@ -136,7 +136,10 @@ class JdSmartDevice:
     feed_id: str
     name: str
     device_id: str | None = None
+    category_id: str | None = None
     category_name: str | None = None
+    config_type: str | None = None
+    detail_type: str | None = None
     room_name: str | None = None
     version: str | None = None
 
@@ -939,13 +942,24 @@ def _parse_devices(data: Any) -> list[JdSmartDevice]:
     devices: list[JdSmartDevice] = []
     seen: set[str] = set()
 
-    def visit(value: Any) -> None:
+    def visit(
+        value: Any,
+        category_id: str | None = None,
+        category_name: str | None = None,
+    ) -> None:
         if isinstance(value, list):
             for item in value:
-                visit(item)
+                visit(item, category_id, category_name)
             return
         if not isinstance(value, dict):
             return
+
+        category_id = _optional_str(
+            value.get("category_id", value.get("categoryId"))
+        ) or category_id
+        category_name = _optional_str(
+            value.get("category_name", value.get("categoryName"))
+        ) or category_name
 
         feed_id = value.get("feed_id", value.get("feedId"))
         is_device = (
@@ -974,8 +988,13 @@ def _parse_devices(data: Any) -> list[JdSmartDevice]:
                         device_id=_optional_str(
                             value.get("device_id", value.get("deviceId"))
                         ),
-                        category_name=_optional_str(
-                            value.get("category_name", value.get("categoryName"))
+                        category_id=category_id,
+                        category_name=category_name,
+                        config_type=_optional_str(
+                            value.get("config_type", value.get("configType"))
+                        ),
+                        detail_type=_optional_str(
+                            value.get("detail_type", value.get("detailType"))
                         ),
                         room_name=_optional_str(
                             value.get("room_name", value.get("roomName"))
@@ -985,7 +1004,7 @@ def _parse_devices(data: Any) -> list[JdSmartDevice]:
                 )
 
         for child in value.values():
-            visit(child)
+            visit(child, category_id, category_name)
 
     visit(data)
     return devices
