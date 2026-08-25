@@ -16,6 +16,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import JdSmartConfigEntry
+from .const import DEVICE_TYPE_AIR_CONDITIONER
 from .entity import JdSmartEntity
 
 
@@ -96,7 +97,12 @@ async def async_setup_entry(
     async_add_entities(
         JdSmartSensor(coordinator, description)
         for coordinator in entry.runtime_data.coordinators.values()
+        if coordinator.device_type == DEVICE_TYPE_AIR_CONDITIONER
         for description in SENSORS
+        if (
+            coordinator.data is None
+            or description.stream_id in coordinator.data.streams
+        )
     )
 
 
