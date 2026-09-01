@@ -124,6 +124,9 @@
       "clean_runtime": {
         "name": "Clean runtime"
       },
+      "co2": {
+        "name": "CO2"
+      },
       "current_humidity": {
         "name": "Current humidity"
       },
@@ -132,6 +135,9 @@
       },
       "mdp_mode": {
         "name": "MDP mode"
+      },
+      "pm25": {
+        "name": "PM2.5"
       },
       "protection_state": {
         "name": "Protection state"

@@ -16,7 +16,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import JdSmartConfigEntry
-from .const import DEVICE_TYPE_AIR_CONDITIONER
+from .const import DEVICE_TYPE_AIR_CONDITIONER, DEVICE_TYPE_AIR_QUALITY_MONITOR
 from .entity import JdSmartEntity
 
 
@@ -41,6 +41,22 @@ SENSORS: tuple[JdSmartSensorDescription, ...] = (
         stream_id="curhum",
         translation_key="current_humidity",
         native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    JdSmartSensorDescription(
+        key="co2",
+        stream_id="curco2",
+        translation_key="co2",
+        device_class=SensorDeviceClass.CO2,
+        native_unit_of_measurement="ppm",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    JdSmartSensorDescription(
+        key="pm25",
+        stream_id="pm25",
+        translation_key="pm25",
+        device_class=SensorDeviceClass.PM25,
+        native_unit_of_measurement="µg/m³",
         state_class=SensorStateClass.MEASUREMENT,
     ),
     JdSmartSensorDescription(
@@ -88,6 +104,12 @@ SENSORS: tuple[JdSmartSensorDescription, ...] = (
 )
 
 
+SUPPORTED_SENSOR_DEVICE_TYPES = {
+    DEVICE_TYPE_AIR_CONDITIONER,
+    DEVICE_TYPE_AIR_QUALITY_MONITOR,
+}
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: JdSmartConfigEntry,
@@ -97,7 +119,7 @@ async def async_setup_entry(
     async_add_entities(
         JdSmartSensor(coordinator, description)
         for coordinator in entry.runtime_data.coordinators.values()
-        if coordinator.device_type == DEVICE_TYPE_AIR_CONDITIONER
+        if coordinator.device_type in SUPPORTED_SENSOR_DEVICE_TYPES
         for description in SENSORS
         if (
             coordinator.data is None
