@@ -133,6 +133,9 @@
             "clean_runtime": {
                 "name": "清洁累计时间"
             },
+            "co2": {
+                "name": "CO2"
+            },
             "current_humidity": {
                 "name": "当前湿度"
             },
@@ -141,6 +144,9 @@
             },
             "mdp_mode": {
                 "name": "MDP 模式"
+            },
+            "pm25": {
+                "name": "PM2.5"
             },
             "protection_state": {
                 "name": "保护状态"

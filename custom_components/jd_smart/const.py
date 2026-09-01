@@ -57,10 +57,13 @@ ATTR_MANUFACTURER = "JD Smart"
 UPDATE_AUTH_FAILURE_THRESHOLD = 3
 
 DEVICE_TYPE_AIR_CONDITIONER = "air_conditioner"
+DEVICE_TYPE_AIR_QUALITY_MONITOR = "air_quality_monitor"
 DEVICE_TYPE_BY_CATEGORY = {
     "101001": DEVICE_TYPE_AIR_CONDITIONER,
+    "102001": DEVICE_TYPE_AIR_QUALITY_MONITOR,
 }
 AIR_CONDITIONER_REQUIRED_STREAMS = frozenset({"power", "mode", "settemp"})
+AIR_QUALITY_MONITOR_REQUIRED_STREAMS: frozenset[str] = frozenset()
 PULL_REQUEST_URL = "https://github.com/orangeboyChen/ha-jd-smart/pulls"
 
 

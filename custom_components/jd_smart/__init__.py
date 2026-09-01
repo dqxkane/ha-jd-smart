@@ -37,6 +37,7 @@ from .const import (
     DEFAULT_PLATFORM_VERSION,
     DEFAULT_USER_AGENT,
     DEVICE_TYPE_AIR_CONDITIONER,
+    DEVICE_TYPE_AIR_QUALITY_MONITOR,
     DOMAIN,
     PULL_REQUEST_URL,
 )
@@ -100,9 +101,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: JdSmartConfigEntry) -> b
             else:
                 if _is_unsupported_stream_layout(device, coordinator):
                     _notify_unsupported_stream_layout(hass, device, coordinator)
-                elif (
-                    device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_AIR_CONDITIONER)
-                    == DEVICE_TYPE_AIR_CONDITIONER
+                elif device.get(
+                    CONF_DEVICE_TYPE, DEVICE_TYPE_AIR_CONDITIONER
+                ) in (
+                    DEVICE_TYPE_AIR_CONDITIONER,
+                    DEVICE_TYPE_AIR_QUALITY_MONITOR,
                 ):
                     persistent_notification.async_dismiss(
                         hass,
@@ -154,12 +157,13 @@ def _is_unsupported_stream_layout(
     device: dict[str, str], coordinator: JdSmartCoordinator
 ) -> bool:
     """Return whether a recognized device has no usable entity handler."""
-    return (
-        device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_AIR_CONDITIONER)
-        == DEVICE_TYPE_AIR_CONDITIONER
-        and coordinator.data is not None
-        and not AIR_CONDITIONER_REQUIRED_STREAMS <= coordinator.data.streams.keys()
-    )
+    device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_AIR_CONDITIONER)
+    if device_type == DEVICE_TYPE_AIR_CONDITIONER:
+        return (
+            coordinator.data is not None
+            and not AIR_CONDITIONER_REQUIRED_STREAMS <= coordinator.data.streams.keys()
+        )
+    return False
 
 
 def _notify_unsupported_stream_layout(
