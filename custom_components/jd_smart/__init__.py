@@ -157,6 +157,8 @@ def _is_unsupported_stream_layout(
     device: dict[str, str], coordinator: JdSmartCoordinator
 ) -> bool:
     """Return whether a recognized device has no usable entity handler."""
+    if not device.get(CONF_CATEGORY_ID):
+        return False
     device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_AIR_CONDITIONER)
     if device_type == DEVICE_TYPE_AIR_CONDITIONER:
         return (
