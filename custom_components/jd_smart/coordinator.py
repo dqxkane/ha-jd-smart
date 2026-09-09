@@ -247,6 +247,15 @@ class JdSmartCoordinator(DataUpdateCoordinator[JdSmartSnapshot]):
         failed_tgt = self.client.credentials.tgt
         try:
             snapshot = await self.client.async_get_snapshot(self.feed_id, digest)
+            if self.data is not None and (
+                not snapshot.from_device_success or not snapshot.streams
+            ):
+                LOGGER.warning(
+                    "JD Smart device did not respond successfully; "
+                    "keeping previous data: feed_id=%s",
+                    self.feed_id,
+                )
+                return self.data
             self._consecutive_update_failures = 0
             self.auth_retry_manager.async_mark_recovered()
             return snapshot
