@@ -1,4 +1,43 @@
 {
+  "options": {
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "token_refresh_failed": "Authentication refresh failed. Check the notification for details or enter new authentication data manually.",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "step": {
+      "init": {
+        "data": {
+          "app_version": "App version",
+          "channel": "Channel",
+          "cookie": "Cookie",
+          "device_id": "Device ID",
+          "device_model": "Device model",
+          "platform": "Platform",
+          "platform_version": "Platform version",
+          "pin": "PIN",
+          "sgm_context": "Sgm-Context",
+          "tgt": "TGT",
+          "user_agent": "User-Agent"
+        },
+        "data_description": {
+          "app_version": "App version from the working capture.",
+          "channel": "Request channel from the working capture.",
+          "cookie": "Cookie copied from the JD Smart app capture.",
+          "device_id": "Public request device_id. Leave empty to generate one.",
+          "device_model": "Request hard_platform/appplatform value.",
+          "pin": "Optional JD account PIN, used for token refresh.",
+          "platform": "Exact request plat value from the working capture.",
+          "platform_version": "Request plat_version/appplatformversion value.",
+          "sgm_context": "Optional Sgm-Context header from a working capture.",
+          "tgt": "The JD app A2/wskey/tgt token.",
+          "user_agent": "User-Agent from the working capture."
+        },
+        "description": "Update JD Smart authentication data."
+      }
+    }
+  },
   "config": {
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",

@@ -1,4 +1,43 @@
 {
+    "options": {
+        "error": {
+            "cannot_connect": "连接失败",
+            "invalid_auth": "认证无效",
+            "token_refresh_failed": "鉴权刷新失败。请查看通知中的详细原因，或手动填写新的鉴权信息。",
+            "unknown": "未知错误"
+        },
+        "step": {
+            "init": {
+                "data": {
+                    "app_version": "应用版本",
+                    "channel": "渠道",
+                    "cookie": "Cookie",
+                    "device_id": "设备 ID",
+                    "device_model": "设备型号",
+                    "pin": "PIN",
+                    "platform": "平台",
+                    "platform_version": "平台版本",
+                    "sgm_context": "Sgm-Context",
+                    "tgt": "TGT",
+                    "user_agent": "User-Agent"
+                },
+                "data_description": {
+                    "app_version": "可用抓包中的应用版本。",
+                    "channel": "可用抓包中的请求渠道。",
+                    "cookie": "从京东小家 App 抓包复制的 Cookie。",
+                    "device_id": "公开请求中的 device_id。留空则自动生成。",
+                    "device_model": "请求中的 hard_platform/appplatform 值。",
+                    "pin": "可选京东账号 PIN，用于刷新 token。",
+                    "platform": "可用抓包中的 plat 原值。",
+                    "platform_version": "请求中的 plat_version/appplatformversion 值。",
+                    "sgm_context": "可用抓包中的 Sgm-Context 请求头，可选。",
+                    "tgt": "京东 App 的 A2/wskey/tgt token。",
+                    "user_agent": "可用抓包中的 User-Agent。"
+                },
+                "description": "更新京东小家认证信息。"
+            }
+        }
+    },
     "config": {
         "abort": {
             "already_configured": "设备已经配置",

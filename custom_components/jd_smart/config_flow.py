@@ -7,8 +7,8 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.components import persistent_notification
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -231,6 +231,14 @@ class JdSmartAcConfigFlow(ConfigFlow, domain=DOMAIN):
     _auth_data: dict[str, Any]
     _devices: list[JdSmartDevice]
     _target_entry: Any | None
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: ConfigEntry,
+    ) -> OptionsFlowHandler:
+        """Get the options flow for this handler."""
+        return OptionsFlowHandler()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -584,3 +592,43 @@ def _configured_feed_ids(entries) -> set[str]:
     for entry in entries:
         feed_ids.update(device[CONF_FEED_ID] for device in _entry_devices(entry.data))
     return feed_ids
+
+
+class OptionsFlowHandler(OptionsFlow):
+    """Handle options flow for JD Smart."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the options."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            data = {**self.config_entry.data, **_clean_input(user_input)}
+            try:
+                await _refresh_auth(self.hass, data)
+            except JdSmartTokenRefreshError:
+                errors["base"] = "token_refresh_failed"
+            except JdSmartAuthError:
+                errors["base"] = "invalid_auth"
+            except JdSmartCannotConnectError:
+                errors["base"] = "cannot_connect"
+            except JdSmartError:
+                errors["base"] = "cannot_connect"
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+            else:
+                for entry in self.hass.config_entries.async_entries(DOMAIN):
+                    entry_data = dict(entry.data)
+                    for key in AUTH_KEYS:
+                        if key in data:
+                            entry_data[key] = data[key]
+                    self.hass.config_entries.async_update_entry(entry, data=entry_data)
+                    await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_create_entry(title="", data={})
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=_schema(self.config_entry.data),
+            errors=errors,
+        )
