@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import homeassistant.util.dt as dt_util
 from homeassistant.components import persistent_notification
@@ -26,6 +26,7 @@ from .api import (
 from .const import (
     AUTH_REFRESH_RETRY_DELAYS,
     CONF_COOKIE,
+    CONF_SCAN_INTERVAL,
     CONF_TGT,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -223,12 +224,13 @@ class JdSmartCoordinator(DataUpdateCoordinator[JdSmartSnapshot]):
         auth_retry_manager: JdSmartAuthRetryManager,
     ) -> None:
         """Initialize coordinator."""
+        scan_interval = entry.data.get(CONF_SCAN_INTERVAL, 300)
         super().__init__(
             hass,
             LOGGER,
             config_entry=entry,
             name=DOMAIN,
-            update_interval=DEFAULT_SCAN_INTERVAL,
+            update_interval=timedelta(seconds=scan_interval),
         )
         self.client = client
         self.feed_id = feed_id

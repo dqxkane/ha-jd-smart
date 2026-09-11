@@ -39,6 +39,7 @@ from .const import (
     CONF_PIN,
     CONF_PLATFORM,
     CONF_PLATFORM_VERSION,
+    CONF_SCAN_INTERVAL,
     CONF_SGM_CONTEXT,
     CONF_TGT,
     CONF_USER_AGENT,
@@ -53,6 +54,7 @@ from .const import (
     DOMAIN,
     LOGGER,
     PULL_REQUEST_URL,
+    SCAN_INTERVAL_OPTIONS,
     auth_refresh_notification_ids,
 )
 
@@ -594,6 +596,54 @@ def _configured_feed_ids(entries) -> set[str]:
     return feed_ids
 
 
+def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Return options schema with auth fields and scan interval."""
+    defaults = defaults or {}
+    return vol.Schema(
+        {
+            vol.Required(CONF_COOKIE, default=defaults.get(CONF_COOKIE, "")): str,
+            vol.Required(CONF_TGT, default=defaults.get(CONF_TGT, "")): str,
+            vol.Optional(CONF_PIN, default=defaults.get(CONF_PIN, "")): str,
+            vol.Optional(
+                CONF_SGM_CONTEXT, default=defaults.get(CONF_SGM_CONTEXT, "")
+            ): str,
+            vol.Optional(CONF_DEVICE_ID, default=defaults.get(CONF_DEVICE_ID, "")): str,
+            vol.Optional(
+                CONF_PLATFORM, default=defaults.get(CONF_PLATFORM, DEFAULT_PLATFORM)
+            ): str,
+            vol.Optional(
+                CONF_APP_VERSION,
+                default=defaults.get(CONF_APP_VERSION, DEFAULT_APP_VERSION),
+            ): str,
+            vol.Optional(
+                CONF_DEVICE_MODEL,
+                default=defaults.get(CONF_DEVICE_MODEL, DEFAULT_DEVICE_MODEL),
+            ): str,
+            vol.Optional(
+                CONF_PLATFORM_VERSION,
+                default=defaults.get(CONF_PLATFORM_VERSION, DEFAULT_PLATFORM_VERSION),
+            ): str,
+            vol.Optional(
+                CONF_CHANNEL, default=defaults.get(CONF_CHANNEL, DEFAULT_CHANNEL)
+            ): str,
+            vol.Optional(
+                CONF_USER_AGENT,
+                default=defaults.get(CONF_USER_AGENT, DEFAULT_USER_AGENT),
+            ): str,
+            vol.Optional(
+                CONF_SCAN_INTERVAL,
+                default=str(defaults.get(CONF_SCAN_INTERVAL, 300)),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[str(k) for k in SCAN_INTERVAL_OPTIONS],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    translation_key=CONF_SCAN_INTERVAL,
+                )
+            ),
+        }
+    )
+
+
 class OptionsFlowHandler(OptionsFlow):
     """Handle options flow for JD Smart."""
 
@@ -604,6 +654,8 @@ class OptionsFlowHandler(OptionsFlow):
         errors: dict[str, str] = {}
         if user_input is not None:
             data = {**self.config_entry.data, **_clean_input(user_input)}
+            if CONF_SCAN_INTERVAL in user_input:
+                data[CONF_SCAN_INTERVAL] = int(user_input[CONF_SCAN_INTERVAL])
             try:
                 await _refresh_auth(self.hass, data)
             except JdSmartTokenRefreshError:
@@ -623,12 +675,14 @@ class OptionsFlowHandler(OptionsFlow):
                     for key in AUTH_KEYS:
                         if key in data:
                             entry_data[key] = data[key]
+                    if CONF_SCAN_INTERVAL in data:
+                        entry_data[CONF_SCAN_INTERVAL] = data[CONF_SCAN_INTERVAL]
                     self.hass.config_entries.async_update_entry(entry, data=entry_data)
                     await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_create_entry(title="", data={})
 
         return self.async_show_form(
             step_id="init",
-            data_schema=_schema(self.config_entry.data),
+            data_schema=_options_schema(self.config_entry.data),
             errors=errors,
         )

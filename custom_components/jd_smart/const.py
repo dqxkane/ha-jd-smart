@@ -6,7 +6,7 @@ from datetime import timedelta
 DOMAIN = "jd_smart"
 LOGGER = logging.getLogger(__package__)
 
-DEFAULT_SCAN_INTERVAL = timedelta(seconds=60)
+DEFAULT_SCAN_INTERVAL = timedelta(seconds=300)
 FAST_POLL_INTERVAL = timedelta(seconds=2)
 FAST_POLL_DURATION = timedelta(seconds=10)
 AUTH_REFRESH_RETRY_DELAYS = (
@@ -33,9 +33,23 @@ CONF_FEED_ID = "feed_id"
 CONF_PLATFORM = "platform"
 CONF_PLATFORM_VERSION = "platform_version"
 CONF_PIN = "pin"
+CONF_SCAN_INTERVAL = "scan_interval"
 CONF_SGM_CONTEXT = "sgm_context"
 CONF_TGT = "tgt"
 CONF_USER_AGENT = "user_agent"
+
+SCAN_INTERVAL_OPTIONS: dict[int, str] = {
+    30: "30 秒",
+    60: "1 分钟",
+    300: "5 分钟（默认）",
+    600: "10 分钟",
+    1800: "30 分钟",
+    3600: "1 小时",
+    10800: "3 小时",
+    21600: "6 小时",
+    43200: "12 小时",
+    86400: "1 天",
+}
 
 DEFAULT_APP_VERSION = "2.2.0"
 DEFAULT_CHANNEL = "76161171"
