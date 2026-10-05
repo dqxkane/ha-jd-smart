@@ -190,6 +190,19 @@ async def _fetch_devices(
         return await _client_from_data(hass, data).async_get_devices()
 
 
+async def _refresh_and_validate_auth(
+    hass: HomeAssistant, data: dict[str, Any]
+) -> list[JdSmartDevice]:
+    """Refresh credentials and prove they work against the live API.
+
+    A successful token refresh only means WJLogin answered with a new A2. The
+    refreshed token can still be rejected by the device API, so every manual
+    auth path must verify it before reporting success to the user.
+    """
+    await _refresh_auth(hass, data)
+    return await _fetch_devices(hass, data)
+
+
 def _device_type(device: JdSmartDevice) -> str | None:
     """Return the supported type matching a server device category."""
     if device.category_id is None:
@@ -279,8 +292,7 @@ class JdSmartAcConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             data = _clean_input(user_input)
             try:
-                await _refresh_auth(self.hass, data)
-                devices = await _fetch_devices(self.hass, data)
+                devices = await _refresh_and_validate_auth(self.hass, data)
             except JdSmartTokenRefreshError:
                 errors["base"] = "token_refresh_failed"
             except JdSmartAuthError:
@@ -325,20 +337,31 @@ class JdSmartAcConfigFlow(ConfigFlow, domain=DOMAIN):
         if entry is None:
             return await self.async_step_manual_auth()
 
+        errors: dict[str, str] = {}
+        data = dict(entry.data)
         try:
-            data = dict(entry.data)
-            await _refresh_auth(self.hass, data)
+            await _refresh_and_validate_auth(self.hass, data)
         except JdSmartTokenRefreshError as err:
             LOGGER.error("JD Smart token refresh failed from config flow: %s", err)
-            return self.async_show_form(
-                step_id="action",
-                data_schema=_action_schema(),
-                errors={"base": "token_refresh_failed"},
-                description_placeholders={"reason": str(err)},
-            )
+            errors["base"] = "token_refresh_failed"
+        except JdSmartAuthError:
+            errors["base"] = "invalid_auth"
+        except JdSmartCannotConnectError:
+            errors["base"] = "cannot_connect"
+        except JdSmartError:
+            errors["base"] = "cannot_connect"
+        except Exception:  # noqa: BLE001
+            LOGGER.exception("Unexpected exception")
+            errors["base"] = "unknown"
+        else:
+            await self._async_update_auth_entries(data)
+            return self.async_abort(reason="auth_refreshed")
 
-        await self._async_update_auth_entries(data)
-        return self.async_abort(reason="auth_refreshed")
+        return self.async_show_form(
+            step_id="action",
+            data_schema=_action_schema(),
+            errors=errors,
+        )
 
     async def async_step_add_device(
         self, user_input: dict[str, Any] | None = None
@@ -472,11 +495,13 @@ class JdSmartAcConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             data = {**entry.data, **_clean_input(user_input)}
             try:
-                await _refresh_auth(self.hass, data)
+                await _refresh_and_validate_auth(self.hass, data)
             except JdSmartTokenRefreshError:
                 errors["base"] = "token_refresh_failed"
             except JdSmartAuthError:
                 errors["base"] = "invalid_auth"
+            except JdSmartCannotConnectError:
+                errors["base"] = "cannot_connect"
             except JdSmartError:
                 errors["base"] = "cannot_connect"
             except Exception:  # noqa: BLE001
@@ -584,8 +609,17 @@ def _primary_entry(entries):
 
 
 def _auth_changed(old_data: dict[str, Any], new_data: dict[str, Any]) -> bool:
-    """Return whether auth fields changed."""
-    return any(old_data.get(key) != new_data.get(key) for key in AUTH_KEYS)
+    """Return whether the supplied authentication fields changed.
+
+    Only keys present in ``new_data`` are compared, so a partial form submit
+    (for example an options save) never looks like a credential change just
+    because optional fields are absent.
+    """
+    return any(
+        old_data.get(key) != new_data.get(key)
+        for key in AUTH_KEYS
+        if key in new_data
+    )
 
 
 def _configured_feed_ids(entries) -> set[str]:
@@ -653,23 +687,27 @@ class OptionsFlowHandler(OptionsFlow):
         """Manage the options."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            data = {**self.config_entry.data, **_clean_input(user_input)}
+            submitted = _clean_input(user_input)
+            data = {**self.config_entry.data, **submitted}
             if CONF_SCAN_INTERVAL in user_input:
                 data[CONF_SCAN_INTERVAL] = int(user_input[CONF_SCAN_INTERVAL])
-            try:
-                await _refresh_auth(self.hass, data)
-            except JdSmartTokenRefreshError:
-                errors["base"] = "token_refresh_failed"
-            except JdSmartAuthError:
-                errors["base"] = "invalid_auth"
-            except JdSmartCannotConnectError:
-                errors["base"] = "cannot_connect"
-            except JdSmartError:
-                errors["base"] = "cannot_connect"
-            except Exception:  # noqa: BLE001
-                LOGGER.exception("Unexpected exception")
-                errors["base"] = "unknown"
-            else:
+            # Only touch the account credentials when they actually changed, so
+            # editing the polling interval does not force a token refresh.
+            if _auth_changed(self.config_entry.data, submitted):
+                try:
+                    await _refresh_and_validate_auth(self.hass, data)
+                except JdSmartTokenRefreshError:
+                    errors["base"] = "token_refresh_failed"
+                except JdSmartAuthError:
+                    errors["base"] = "invalid_auth"
+                except JdSmartCannotConnectError:
+                    errors["base"] = "cannot_connect"
+                except JdSmartError:
+                    errors["base"] = "cannot_connect"
+                except Exception:  # noqa: BLE001
+                    LOGGER.exception("Unexpected exception")
+                    errors["base"] = "unknown"
+            if not errors:
                 for entry in self.hass.config_entries.async_entries(DOMAIN):
                     entry_data = dict(entry.data)
                     for key in AUTH_KEYS:

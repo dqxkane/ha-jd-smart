@@ -38,6 +38,7 @@ from .const import (
     DEFAULT_USER_AGENT,
     DEVICE_LIST_PATH,
     HMAC_KEY,
+    JD_SMART_AUTH_ERROR_CODES,
     JD_SMART_BASE_URL,
     LOGGER,
     SNAPSHOT_PATH,
@@ -768,6 +769,13 @@ class JdSmartClient:
                         response.status,
                         _truncate(text),
                     )
+                    if response.status in (
+                        HTTPStatus.UNAUTHORIZED,
+                        HTTPStatus.FORBIDDEN,
+                    ):
+                        raise JdSmartAuthError(
+                            f"JD Smart HTTP status: {response.status}"
+                        )
                     raise ClientResponseError(
                         response.request_info,
                         response.history,
@@ -803,9 +811,18 @@ class JdSmartClient:
                 error_info,
                 payload.get("status"),
             )
-            if error_code == "401":
+            if error_code in JD_SMART_AUTH_ERROR_CODES:
                 raise JdSmartAuthError(error_info)
             raise JdSmartError(error_info)
+        if str(payload.get("status", "")) in JD_SMART_AUTH_ERROR_CODES:
+            LOGGER.warning(
+                "JD Smart session expired: path=%s, status=%s",
+                url.split("?", 1)[0],
+                payload.get("status"),
+            )
+            raise JdSmartAuthError(
+                f"JD Smart session expired (status {payload.get('status')})"
+            )
         if payload.get("status") not in (0, "0"):
             LOGGER.warning(
                 "JD Smart unexpected status: path=%s, status=%s, payload=%s",
@@ -894,7 +911,18 @@ class JdSmartClient:
             raw_body,
             headers=self._headers(raw_body),
         )
-        return JdSmartSnapshot.from_result(payload["result"])
+        snapshot = JdSmartSnapshot.from_result(payload["result"])
+        LOGGER.debug(
+            "JD Smart snapshot: feed_id=%s, sent_digest=%r, got_digest=%r, "
+            "from_device_success=%s, streams=%s, status=%s",
+            feed_id,
+            digest,
+            snapshot.digest,
+            snapshot.from_device_success,
+            len(snapshot.streams),
+            snapshot.status,
+        )
+        return snapshot
 
     def _control_body(self, feed_id: str, commands: dict[str, Any]) -> str:
         """Build control business body."""

@@ -67,8 +67,29 @@ DEVICE_LIST_PATH = "/c/service/devmanager/v2/getDevicesAndCategory"
 APP_KEY = "a188caaf009839ba200bb55bb8fa38407a595c2a"
 HMAC_KEY = "e685c8d1daa7e4dec8821a3df41c0b34a56db779"
 
+# JD Smart signals an expired login session with errorCode/status -4 and
+# errorInfo "登录已过期，请重新登录". It does not use HTTP 401 for this.
+JD_SMART_AUTH_ERROR_CODES = frozenset({"401", "-4"})
+
 ATTR_MANUFACTURER = "JD Smart"
+
+# Number of CONSECUTIVE failed polls tolerated before the integration gives up
+# on keeping the entities available. Any poll that reaches the success path
+# resets the counter, so this is not a lifetime tally: with the default
+# 5-minute interval, 3 means "no usable response for ~15 minutes in a row".
+# Below the threshold a failure serves the previous data without raising, so
+# entities stay available and a single network blip is silent in the UI.
 UPDATE_AUTH_FAILURE_THRESHOLD = 3
+
+# The snapshot endpoint is incremental: it returns the device's current digest
+# plus whatever streams changed since the digest we sent. `fromDeviceSuccess`
+# only reports whether the *device* pushed new data this round; JD answers
+# `false` for ordinary "nothing changed" polls while still returning a valid,
+# advanced digest and the full stream set. Treating it as a validity check
+# froze every entity at the reboot value, so responses are accepted whenever
+# they carry a usable digest. An empty digest means "no usable cursor" and is
+# the only case that triggers a resync request.
+RESYNC_AFTER_SILENT_POLLS = 3
 
 DEVICE_TYPE_AIR_CONDITIONER = "air_conditioner"
 DEVICE_TYPE_AIR_QUALITY_MONITOR = "air_quality_monitor"

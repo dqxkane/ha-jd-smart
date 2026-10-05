@@ -15,6 +15,9 @@ secrets.yaml
 known_devices.yaml
 home-assistant.log*
 
+# Local agent workspace (memory, scratch notes) - not part of the project
+.workbuddy/
+
 # Packet captures often contain tokens and cookies. Do not commit them.
 *.har
 *.pcap

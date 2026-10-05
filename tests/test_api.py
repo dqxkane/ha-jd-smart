@@ -1,7 +1,8 @@
-"""Tests for JD Smart API client connectivity failures."""
+"""Tests for the JD Smart API client: connectivity failures and error mapping."""
 
 from __future__ import annotations
 
+import json
 from http import HTTPStatus
 from typing import Any
 from unittest.mock import Mock
@@ -13,10 +14,12 @@ from multidict import CIMultiDict
 
 from custom_components.jd_smart.api import (
     REQUEST_TIMEOUT,
+    JdSmartAuthError,
     JdSmartCannotConnectError,
     JdSmartClient,
     JdSmartCredentials,
     JdSmartDeviceProfile,
+    JdSmartError,
     JdSmartTokenRefreshError,
 )
 
@@ -91,6 +94,54 @@ def _client(session: _Session) -> JdSmartClient:
     )
 
 
+class _FakeResponse:
+    """Minimal aiohttp response stand-in for canned JSON payloads."""
+
+    def __init__(self, payload: str, status: int = 200) -> None:
+        """Store the canned body and status code."""
+        self._payload = payload
+        self.status = status
+        self.headers: dict[str, str] = {}
+        self.history: tuple[Any, ...] = ()
+        self.request_info: Any = None
+
+    async def text(self) -> str:
+        """Return the raw body."""
+        return self._payload
+
+    async def __aenter__(self) -> _FakeResponse:
+        """Enter the response context manager."""
+        return self
+
+    async def __aexit__(self, *_exc: object) -> bool:
+        """Exit the response context manager."""
+        return False
+
+
+class _FakeSession:
+    """Minimal aiohttp session stand-in returning a canned JSON body."""
+
+    def __init__(self, payload: dict[str, Any], status: int = 200) -> None:
+        """Store the canned payload and status code."""
+        self._response = _FakeResponse(json.dumps(payload), status)
+
+    def post(self, *_args: object, **_kwargs: object) -> _FakeResponse:
+        """Return the canned response."""
+        return self._response
+
+
+def _payload_client(payload: dict[str, Any], status: int = 200) -> JdSmartClient:
+    """Build a client wired to a canned JSON response."""
+    return JdSmartClient(
+        _FakeSession(payload, status),  # type: ignore[arg-type]
+        JdSmartCredentials(cookie="cookie", tgt="tgt"),
+        JdSmartDeviceProfile(device_id="device-id"),
+    )
+
+
+# --- connectivity failures: explicit timeout and diagnosable reasons ---
+
+
 async def test_snapshot_reports_dns_failure_reason() -> None:
     """A DNS failure is surfaced with the underlying resolver message."""
     session = _Session(error=_connector_error("dns cannot resolve"))
@@ -137,3 +188,58 @@ async def test_token_refresh_reports_failure_reason() -> None:
         await _client(session).async_refresh_token()
 
     assert session.calls[0]["timeout"] is REQUEST_TIMEOUT
+
+
+# --- error mapping: expired credentials must start a token refresh ---
+
+
+async def test_expired_session_error_code_is_an_auth_error() -> None:
+    """JD reports an expired session as errorCode -4, not as HTTP 401."""
+    client = _payload_client(
+        {
+            "error": {"errorCode": -4, "errorInfo": "登录已过期，请重新登录"},
+            "status": -4,
+        }
+    )
+
+    with pytest.raises(JdSmartAuthError):
+        await client._request_json("https://api.smart.jd.com/x", "{}", headers={})
+
+
+async def test_expired_session_status_is_an_auth_error() -> None:
+    """A bare -4 status without an error object is still an auth error."""
+    client = _payload_client({"status": -4})
+
+    with pytest.raises(JdSmartAuthError):
+        await client._request_json("https://api.smart.jd.com/x", "{}", headers={})
+
+
+async def test_http_401_is_an_auth_error() -> None:
+    """An HTTP 401 response must trigger a token refresh."""
+    client = _payload_client({}, status=401)
+
+    with pytest.raises(JdSmartAuthError):
+        await client._request_json("https://api.smart.jd.com/x", "{}", headers={})
+
+
+async def test_other_api_errors_are_not_auth_errors() -> None:
+    """Non-auth API errors must not trigger a token refresh."""
+    client = _payload_client(
+        {"error": {"errorCode": -1, "errorInfo": "boom"}, "status": -1}
+    )
+
+    with pytest.raises(JdSmartError) as err:
+        await client._request_json("https://api.smart.jd.com/x", "{}", headers={})
+
+    assert not isinstance(err.value, JdSmartAuthError)
+
+
+async def test_successful_payload_is_returned() -> None:
+    """A healthy payload is returned unchanged."""
+    payload = {"status": 0, "result": "{}"}
+    client = _payload_client(payload)
+
+    assert (
+        await client._request_json("https://api.smart.jd.com/x", "{}", headers={})
+        == payload
+    )
